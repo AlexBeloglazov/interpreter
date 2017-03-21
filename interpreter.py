@@ -1,4 +1,7 @@
 
+class ReturnException(Exception):
+    pass
+
 #### DATA TYPES ####
 
 class Bool:
@@ -217,6 +220,13 @@ class CMDQuit:
 class CMDEnd:
     pass
 
+class CMDFunEnd:
+    pass
+
+class CMDReturn:
+    def execute(self, stack, env):
+        raise ReturnException()
+
 class CMDLet():
     def __init__(self):
         self.body = []
@@ -230,13 +240,63 @@ class CMDLet():
         if lstack:
             stack.append(lstack[-1])
 
+class CMDFun:
+    def __init__(self, typ, name, param):
+        self.type = typ
+        self.name = name
+        self.param = param
+        self.body = []
+    def append(self, instr):
+        self.body.append(instr)
+    def set_arg(self, arg):
+        self.env[self.param] = arg
+    def execute(self, stack, env):
+        env[self.name] = self
+        self.env = env.copy()
+        stack.append(Unit())
+
+class CMDCall():
+    def execute(self, stack, env):
+        try:
+            arg, fun = stack[-2:]
+            fun = env[fun.name]
+            if isinstance(arg, Error):
+                return stack.append(arg)
+            if isinstance(arg, Name):
+                fun.set_arg(env[arg.name])
+            else:
+                fun.set_arg(arg)
+                arg = None
+            fstack, fenv = [], fun.env.copy()
+            for cmd in fun.body:
+                cmd.execute(fstack, fenv)
+            stack.pop()
+            stack.pop()
+            if fun.type == "inOutFun" and arg:
+                env[arg.name] = fenv[fun.param]
+        except ReturnException:
+            stack.pop()
+            stack.pop()
+            top = None
+            if fstack:
+                top = fstack[-1]
+            if isinstance(top, Name):
+                refers = fenv.get(top.name, top)
+                stack.append(refers if not isinstance(refers, CMDFun) else top)
+            else:
+                stack.append(top)
+            if fun.type == "inOutFun" and arg:
+                env[arg.name] = fenv[fun.param]
+        except:
+            stack.append(Error())
+
 class Interpreter:
     def __init__(self,):
         self.cmdMap = {'pop': CMDPop(), ':true:': CMDTrue(), ':false:': CMDFalse(), ':error:': CMDError(), \
                         'add': CMDAdd(), 'sub': CMDSub(), 'mul': CMDMul(), 'div': CMDDiv(), 'rem': CMDRem(), \
                         'neg': CMDNeg(), 'swap': CMDSwap(), 'quit': CMDQuit(), 'and': CMDAnd(), 'or': CMDOr(), \
                         'not': CMDNot(), 'equal': CMDEqual(), 'lessThan': CMDLessThan(), 'bind': CMDBind(), \
-                        'if': CMDIf(), 'end': CMDEnd()}
+                        'if': CMDIf(), 'end': CMDEnd(), 'funEnd': CMDFunEnd(), 'return': CMDReturn(), 'call': CMDCall()}
     def parse_line(self, line):
         if (line.startswith("push")):
             arg = line.split("push")[-1].strip()
@@ -246,7 +306,10 @@ class Interpreter:
                 return CMDPush(Name(arg))
             elif arg.startswith('"') and arg.endswith('"'):
                 return CMDPush(arg[1:-1])
-            return CMDError()
+            return self.cmdMap[':error:']
+        elif (line.startswith("fun ") or line.startswith("inOutFun")):
+            t, n, p = line.split()
+            return CMDFun(t, n, p)
         elif line == "let":
             return CMDLet()
         return self.cmdMap.get(line, CMDError())
@@ -255,10 +318,10 @@ class Interpreter:
         listInstructions = [[]]
         for line in inFile.readlines():
             instruction = self.parse_line(line.strip())
-            if isinstance(instruction, CMDLet):
+            if isinstance(instruction, CMDFun) or isinstance(instruction, CMDLet):
                 listInstructions[-1].append(instruction)
                 listInstructions.append(instruction)
-            elif isinstance(instruction, CMDEnd):
+            elif isinstance(instruction, CMDEnd) or isinstance(instruction, CMDFunEnd):
                 listInstructions.pop()
             elif isinstance(instruction, CMDQuit):
                 break
