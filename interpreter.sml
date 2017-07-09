@@ -247,12 +247,3 @@ fun interpreter(infile : string, outfile : string) =
     in
         main (cmdInstructions, ([], [], (fn x => NOVAL), []))
     end
-
-fun run () = let
-    val names = ["input_1.txt", "input_2.txt", "input_3.txt", "input_4.txt", "input_5.txt", "input_6.txt", "input_7.txt", "input_8.txt", "input_9.txt", "input_10.txt", "input_11.txt", "input_12.txt", "input_13.txt", "input_14.txt", "input_15.txt", "input_16.txt", "input_17.txt", "input_18.txt", "input_19.txt", "input_20.txt", "input_21.txt", "input_22.txt"];
-    fun loop l = case l of
-        name::rest => (interpreter("tst3/"^name, "rslt3/"^name ); loop rest)
-        | _ => ();
-    in
-        loop names
-    end
